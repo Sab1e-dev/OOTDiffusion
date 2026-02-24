@@ -55,6 +55,101 @@ cd OOTDiffusion/run
 python run_ootd.py --model_path <model-image-path> --cloth_path <cloth-image-path> --model_type dc --category 2 --scale 2.0 --sample 4
 ```
 
+## FastAPI service (local)
+
+We provide a simple FastAPI-based HTTP service in this repo to call `run_ootd.py` from other programs.
+
+### Environment (GPU)
+
+Make sure you are using a GPU build of PyTorch and a CUDA-enabled environment. One working combination:
+
+```sh
+conda create -n ootd python==3.10
+conda activate ootd
+
+pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 torchaudio==2.0.2+cu118 \
+  --index-url https://download.pytorch.org/whl/cu118
+
+pip install -r requirements.txt
+pip install fastapi uvicorn[standard] python-multipart
+pip install huggingface-hub==0.24.0
+```
+
+Check CUDA:
+
+```python
+python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.version.cuda)"
+```
+
+### Start API server
+
+From the project root:
+
+```sh
+cd OOTDiffusion
+python run/api_ootd.py
+```
+
+The default address is:
+
+- `http://127.0.0.1:7735`
+- Health check: `GET /health` → `{ "status": "ok" }`
+
+### General try-on API: `POST /try-on`
+
+`multipart/form-data` request:
+
+- `model_image` (file, required): person image
+- `cloth_image` (file, required): garment image
+- `model_type` (str, optional, default `"hd"`): `"hd"` (VITON-HD) or `"dc"` (Dress Code)
+- `category` (int, optional, default `0`): only used when `model_type="dc"`; `0=upperbody`, `1=lowerbody`, `2=dress`
+- `scale` (float, optional, default `2.0`)
+- `sample` (int, optional, default `4`)
+- `step` (int, optional, default `20`)
+- `seed` (int, optional, default `-1`)
+
+Response:
+
+- `200 OK`: PNG image body (try-on result)
+- Error: JSON with `detail` field and backend logs
+
+Example with `curl`:
+
+```sh
+curl -X POST "http://127.0.0.1:7735/try-on" \
+  -F "model_image=@/path/to/person.png" \
+  -F "cloth_image=@/path/to/cloth.png" \
+  -F "model_type=dc" \
+  -F "category=2" \
+  --output result_try_on.png
+```
+
+### Qipao-only API: `POST /try-on-qipao`
+
+This endpoint is specialized for cheongsam/qipao clothes and internally fixes:
+
+- `model_type = "dc"`
+- `category = 2` (dress)
+
+Request (`multipart/form-data`):
+
+- `model_image` (file, required): person image
+- `cloth_image` (file, required): qipao garment image
+- `scale`, `sample`, `step`, `seed`: same as `/try-on`
+
+Response:
+
+- `200 OK`: PNG image body (qipao try-on result)
+
+Example:
+
+```sh
+curl -X POST "http://127.0.0.1:7735/try-on-qipao" \
+  -F "model_image=@/path/to/person.png" \
+  -F "cloth_image=@/path/to/qipao.png" \
+  --output qipao_result.png
+```
+
 ## Citation
 ```
 @article{xu2024ootdiffusion,
