@@ -3,3 +3,6 @@ __pycache__/
 .vscode/
 *.pyc
 .uuid
+checkpoints/
+venv/
+images_output/
