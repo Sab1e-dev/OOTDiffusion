@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,11 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="OOTDiffusion API", description="Virtual try-on API wrapping run_ootd.py", version="1.0.0")
+
+logger = logging.getLogger("api_ootd")
+if not logger.handlers:
+    # 简单的日志配置：INFO 级别输出到控制台
+    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
 
 
 def _save_upload(file: UploadFile, suffix_default: str = ".png") -> Path:
@@ -49,6 +55,16 @@ def _run_ootd(
     if category not in {0, 1, 2}:
         raise HTTPException(status_code=400, detail="category must be 0, 1 or 2")
 
+    logger.info(
+        "[run_ootd] start | model_type=%s, category=%s, scale=%s, sample=%s, step=%s, seed=%s",
+        model_type,
+        category,
+        scale,
+        sample,
+        step,
+        seed,
+    )
+
     # 清理旧输出，避免混淆
     for p in OUTPUT_DIR.glob("out_*_*.png"):
         try:
@@ -77,26 +93,45 @@ def _run_ootd(
         str(seed),
     ]
 
+    logger.info("[run_ootd] command: %s", " ".join(cmd))
+
+    # 实时读取 run_ootd.py 的输出，并打印到日志中，方便观察进度
     try:
-        completed = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
             cwd=RUN_DIR,
-            check=False,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
         )
     except Exception as e:
+        logger.exception("[run_ootd] failed to start run_ootd.py")
         raise HTTPException(status_code=500, detail=f"Failed to start run_ootd.py: {e}")
 
-    if completed.returncode != 0:
+    logs: list[str] = []
+    if proc.stdout is not None:
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            logs.append(line)
+            # 直接打印子进程输出作为进度日志
+            logger.info("[run_ootd][subprocess] %s", line)
+
+    return_code = proc.wait()
+
+    if return_code != 0:
+        log_text = "\n".join(logs)
+        logger.error("[run_ootd] run_ootd.py exited with code %s", return_code)
         raise HTTPException(
             status_code=500,
             detail={
                 "message": "run_ootd.py failed",
-                "stdout": completed.stdout.decode(errors="ignore"),
-                "stderr": completed.stderr.decode(errors="ignore"),
+                "return_code": return_code,
+                "logs": log_text,
             },
         )
+
+    logger.info("[run_ootd] finished successfully")
 
     # 寻找输出图片（out_<model_type>_*.png）
     candidates = sorted(OUTPUT_DIR.glob(f"out_{model_type}_*.png"))

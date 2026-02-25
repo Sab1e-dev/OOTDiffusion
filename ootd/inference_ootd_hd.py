@@ -2,6 +2,7 @@ import pdb
 from pathlib import Path
 import sys
 PROJECT_ROOT = Path(__file__).absolute().parents[0].absolute()
+REPO_ROOT = PROJECT_ROOT.parents[0]
 sys.path.insert(0, str(PROJECT_ROOT))
 import os
 import torch
@@ -24,10 +25,11 @@ import torch.nn.functional as F
 from transformers import AutoProcessor, CLIPVisionModelWithProjection
 from transformers import CLIPTextModel, CLIPTokenizer
 
-VIT_PATH = "../checkpoints/clip-vit-large-patch14"
-VAE_PATH = "../checkpoints/ootd"
-UNET_PATH = "../checkpoints/ootd/ootd_hd/checkpoint-36000"
-MODEL_PATH = "../checkpoints/ootd"
+# Use absolute paths based on repository root to avoid CWD issues
+VIT_PATH = REPO_ROOT / "checkpoints" / "clip-vit-large-patch14"
+VAE_PATH = REPO_ROOT / "checkpoints" / "ootd"
+UNET_PATH = REPO_ROOT / "checkpoints" / "ootd" / "ootd_hd" / "checkpoint-36000"
+MODEL_PATH = REPO_ROOT / "checkpoints" / "ootd"
 
 class OOTDiffusionHD:
 
